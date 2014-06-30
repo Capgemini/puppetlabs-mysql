@@ -1,10 +1,16 @@
 require 'beaker-rspec'
 
-hosts.each do |host|
-  # Install Puppet
-  install_package host, 'rubygems'
-  on host, 'gem install puppet --no-ri --no-rdoc'
-  on host, "mkdir -p #{host['distmoduledir']}"
+UNSUPPORTED_PLATFORMS = [ 'Windows', 'Solaris', 'AIX' ]
+
+unless ENV['RS_PROVISION'] == 'no' or ENV['BEAKER_provision'] == 'no'
+  if hosts.first.is_pe?
+    install_pe
+  else
+    install_puppet
+  end
+  hosts.each do |host|
+    on hosts, "mkdir -p #{host['distmoduledir']}"
+  end
 end
 
 RSpec.configure do |c|
@@ -22,11 +28,12 @@ RSpec.configure do |c|
       # Required for binding tests.
       if fact('osfamily') == 'RedHat'
         version = fact("operatingsystemmajrelease")
-        shell("rpm -i http://yum.puppetlabs.com/puppetlabs-release-el-#{version}.noarch.rpm")
+        shell("yum localinstall -y http://yum.puppetlabs.com/puppetlabs-release-el-#{version}.noarch.rpm")
       end
 
-      shell('/bin/touch /etc/puppet/hiera.yaml')
+      shell("/bin/touch #{default['puppetpath']}/hiera.yaml")
       shell('puppet module install puppetlabs-stdlib --version 3.2.0', { :acceptable_exit_codes => [0,1] })
+      on host, puppet('module','install','stahnma/epel'), { :acceptable_exit_codes => [0,1] }
     end
   end
 end

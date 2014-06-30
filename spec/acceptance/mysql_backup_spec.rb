@@ -1,13 +1,20 @@
 require 'spec_helper_acceptance'
 
-describe 'mysql::server::backup class' do
+describe 'mysql::server::backup class', :unless => UNSUPPORTED_PLATFORMS.include?(fact('operatingsystem')) do
   context 'should work with no errors' do
     it 'when configuring mysql backups' do
       pp = <<-EOS
         class { 'mysql::server': root_password => 'password' }
-        mysql::db { 'backup1':
+        mysql::db { [
+          'backup1',
+          'backup2'
+        ]:
           user     => 'backup',
           password => 'secret',
+        }
+
+        package { 'bzip2':
+          ensure => present,
         }
 
         class { 'mysql::server::backup':
@@ -15,6 +22,14 @@ describe 'mysql::server::backup class' do
           backuppassword => 'mypassword',
           backupdir      => '/tmp/backups',
           backupcompress => true,
+          postscript     => [
+            'rm -rf /var/tmp/mysqlbackups',
+            'rm -f /var/tmp/mysqlbackups.done',
+            'cp -r /tmp/backups /var/tmp/mysqlbackups',
+            'touch /var/tmp/mysqlbackups.done',
+          ],
+          execpath      => '/usr/bin:/usr/sbin:/bin:/sbin:/opt/zimbra/bin',
+          require       => Package['bzip2'],
         }
       EOS
 
@@ -23,7 +38,6 @@ describe 'mysql::server::backup class' do
       end
       apply_manifest(pp, :catch_failures => true) do |r|
         expect(r.stderr).to eq("")
-        expect(r.exit_code).to be_zero
       end
     end
   end
@@ -31,7 +45,7 @@ describe 'mysql::server::backup class' do
   describe 'mysqlbackup.sh' do
     it 'should run mysqlbackup.sh with no errors' do
       shell("/usr/local/sbin/mysqlbackup.sh") do |r|
-        expect(r.stderr).to eq("-- Warning: Skipping the data of table mysql.event. Specify the --events option explicitly.\n")
+        expect(r.stderr).to eq("")
       end
     end
 
